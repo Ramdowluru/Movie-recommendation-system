@@ -1,11 +1,13 @@
-
 import streamlit as st
 import pickle
 import pandas as pd
 import requests
+import os
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.feature_extraction.text import CountVectorizer
 
 # ------------------ CONFIG ------------------ #
-API_KEY = "149c8bccd16d8ab6de826b5cfc95d84e"
+API_KEY = os.getenv("TMDB_API_KEY")  # secure for deployment
 BASE_URL = "https://api.themoviedb.org/3/movie/"
 IMAGE_URL = "https://image.tmdb.org/t/p/w500/"
 PLACEHOLDER = "https://via.placeholder.com/500x750?text=No+Image"
@@ -13,16 +15,21 @@ PLACEHOLDER = "https://via.placeholder.com/500x750?text=No+Image"
 st.set_page_config(page_title="Movie Recommender", layout="wide")
 
 
-# ------------------ LOAD DATA ------------------ #
+# ------------------ LOAD DATA + CREATE SIMILARITY ------------------ #
 @st.cache_data
-def load_data():
+def load_movies_and_similarity():
     movies_dict = pickle.load(open("movie_dict.pkl", "rb"))
     movies = pd.DataFrame(movies_dict)
-    similarity = pickle.load(open("similarity.pkl", "rb"))
+
+    cv = CountVectorizer(max_features=5000, stop_words='english')
+    vectors = cv.fit_transform(movies['tags']).toarray()
+
+    similarity = cosine_similarity(vectors)
+
     return movies, similarity
 
 
-movies, similarity = load_data()
+movies, similarity = load_movies_and_similarity()
 
 
 # ------------------ FETCH POSTER ------------------ #
@@ -30,7 +37,7 @@ movies, similarity = load_data()
 def fetch_poster(movie_id):
     try:
         url = f"{BASE_URL}{movie_id}?api_key={API_KEY}&language=en-US"
-        response = requests.get(url, timeout=2)
+        response = requests.get(url, timeout=3)
         response.raise_for_status()
         data = response.json()
 
@@ -52,7 +59,7 @@ def recommend(movie):
         list(enumerate(distances)),
         reverse=True,
         key=lambda x: x[1]
-    )[1:6]   # Top 5 recommendations
+    )[1:6]
 
     recommended_movies = []
     recommended_posters = []
@@ -82,5 +89,3 @@ if st.button("Recommend"):
         with col:
             st.markdown(f"**{names[idx]}**")
             st.image(posters[idx])
-
-
